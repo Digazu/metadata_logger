@@ -38,7 +38,9 @@ defmodule MetadataLogger do
         "level" => "info",
         "message" => "hello world",
         "metadata" => %{"foo" => "bar"},
-        "timestamp" => "2019-11-22T12:23:45.000678"
+        "timestamp" => "2019-11-22T12:23:45.000678",
+        "file" => "/my/file.ex",
+        "line" => 11
       }
 
       iex> MetadataLogger.format(
@@ -54,7 +56,9 @@ defmodule MetadataLogger do
         "level" => "info",
         "message" => %{"hello" => "world"},
         "metadata" => %{"foo" => "bar"},
-        "timestamp" => "2019-11-22T12:23:45.000678"
+        "timestamp" => "2019-11-22T12:23:45.000678",
+        "file" => "/my/file.ex",
+        "line" => 11
       }
 
   """
@@ -63,26 +67,24 @@ defmodule MetadataLogger do
   def format(level, message, ts, metadata) do
     map = log_to_map(level, message, ts, metadata)
 
-    [
-      map
-      |> scrub()
-      |> Jason.encode_to_iodata!(map),
-      "\n"
-    ]
+    [map |> Jason.encode_to_iodata!(map), "\n"]
   rescue
     e ->
-      %{
-        level: "error",
-        message: "could not format json message",
-        logger_data: %{
-          exception: inspect(e),
-          level: inspect(level),
-          ts: inspect(ts),
-          message: inspect(message),
-          metadata: inspect(metadata)
+      [
+        %{
+          level: "error",
+          message: "could not format json message",
+          logger_data: %{
+            exception: inspect(e),
+            level: inspect(level),
+            ts: inspect(ts),
+            message: inspect(message),
+            metadata: inspect(metadata)
+          }
         }
-      }
-      |> Jason.encode!()
+        |> Jason.encode!(),
+        "\n"
+      ]
   end
 
   @doc """
@@ -163,13 +165,12 @@ defmodule MetadataLogger do
         ) ::
           map()
   def log_to_map(level, message, ts, metadata) do
-    with m <- Enum.into(metadata, %{}),
-         m <- Map.drop(m, [:error_logger, :mfa, :report_cb]),
+    with m <- Map.new(metadata),
+         m <- Map.drop(m, [:error_logger, :report_cb, :line, :file]),
+         {mfa, m} <- Map.pop(m, :mfa),
          {app, m} <- Map.pop(m, :application),
          {module, m} <- Map.pop(m, :module),
          {function, m} <- Map.pop(m, :function),
-         {file, m} <- Map.pop(m, :file),
-         {line, m} <- Map.pop(m, :line),
          {pid, m} <- Map.pop(m, :pid),
          {gl, m} <- Map.pop(m, :gl),
          {ancestors, m} <- Map.pop(m, :ancestors),
@@ -178,12 +179,12 @@ defmodule MetadataLogger do
          {initial_call, m} <- Map.pop(m, :initial_call),
          {domain, m} <- Map.pop(m, :domain),
          {registered_name, m} <- Map.pop(m, :registered_name) do
+      {module, function} = extract_module_function(module, function, mfa)
+
       %{metadata: m}
       |> put_val(:app, app)
       |> put_val(:module, module)
       |> put_val(:function, function)
-      |> put_val(:file, file)
-      |> put_val(:line, line)
       |> put_val(:pid, nil_or_inspect(pid))
       |> put_val(:gl, nil_or_inspect(gl))
       |> put_val(:crash_reason, nil_or_inspect(crash_reason))
@@ -196,6 +197,17 @@ defmodule MetadataLogger do
     |> Map.put(:level, level)
     |> Map.put(:message, transform_message(message))
     |> Map.put(:timestamp, transform_timestamp(ts))
+  end
+
+  defp extract_module_function(module, function, mfa) do
+    if is_nil(module) or is_nil(function) do
+      case mfa do
+        {mod, func, arity} -> {mod, to_string(func) <> "/" <> to_string(arity)}
+        _ -> {nil, nil}
+      end
+    else
+      {module, function}
+    end
   end
 
   defp nil_or_inspect(nil), do: nil
@@ -216,12 +228,5 @@ defmodule MetadataLogger do
   defp transform_timestamp({{y, month, d}, {h, minutes, s, mil}}) do
     {:ok, dt} = NaiveDateTime.new(y, month, d, h, minutes, s, mil)
     dt
-  end
-
-  defp scrub(map) do
-    map
-    |> Map.delete(:function)
-    |> Map.delete(:file)
-    |> Map.delete(:line)
   end
 end

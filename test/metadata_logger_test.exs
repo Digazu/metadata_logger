@@ -12,7 +12,10 @@ defmodule MetadataLoggerTest do
       "metadata" => %{"foo" => "bar", "list" => [1, 2, 3]},
       "timestamp" => @ts_iso8601,
       "level" => "info",
-      "message" => "https://elixir-lang.org"
+      "message" => "https://elixir-lang.org",
+      "file" => "/my/file.ex",
+      "function" => "hello/1",
+      "line" => 11
     }
 
     got =
@@ -56,7 +59,10 @@ defmodule MetadataLoggerTest do
       "metadata" => %{"foo" => "bar", "list" => [1, 2, 3]},
       "timestamp" => @ts_iso8601,
       "level" => "info",
-      "message" => "hi"
+      "message" => "hi",
+      "file" => "/my/file.ex",
+      "function" => "hello/1",
+      "line" => 11
     }
 
     got =
@@ -156,7 +162,9 @@ defmodule MetadataLoggerTest do
       "metadata" => %{},
       "timestamp" => @ts_iso8601,
       "level" => "info",
-      "message" => "hi"
+      "message" => "hi",
+      "function" => "bar/1",
+      "module" => "Elixir.Foo"
     }
 
     got =
